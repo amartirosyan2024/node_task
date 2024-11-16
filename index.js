@@ -53,13 +53,26 @@ app.post("/api/users", (req, res) => {
     return res.status(400).json(`${error.name}: ${error.message}`);
   }
 
-  const insertQuery = db.prepare("INSERT INTO users (username) VALUES (?)");
-  insertQuery.run(username, function (err) {
+  const usernameQuery = "SELECT * FROM users WHERE username = ?";
+
+  db.get(usernameQuery, [username], (err, row) => {
     if (err) {
-      return res.status(500).json({ error: "Failed to create user" });
+      return res.status(500).json({ error: "Database error" });
     }
 
-    res.json({ username, _id: this.lastID, username });
+    if (row) {
+      const error = new Error("User already exists");
+      return res.status(400).json(`${error.name}: ${error.message}`);
+    }
+
+    const insertQuery = db.prepare("INSERT INTO users (username) VALUES (?)");
+    insertQuery.run(username, function (err) {
+      if (err) {
+        return res.status(500).json({ error: "Failed to create user" });
+      }
+
+      return res.json({ username, _id: this.lastID, username });
+    });
   });
 });
 
@@ -70,7 +83,7 @@ app.get("/api/users", (req, res) => {
       return res.status(500).json({ error: "Failed to fetch users" });
     }
 
-    res.json(rows);
+    return res.json(rows);
   });
 });
 
@@ -131,7 +144,7 @@ app.post("/api/users/:_id/exercises", (req, res) => {
           return res.status(500).json({ error: "Failed to add exercise" });
         }
 
-        res.json({
+        return res.json({
           _id: userId,
           username: username,
           date: formattedDate.toDateString(),
@@ -179,11 +192,6 @@ app.get("/api/users/:_id/logs", (req, res) => {
       "SELECT description, duration, date FROM exercises WHERE user_id = ?";
     let queryParams = [userId];
 
-    if (limit && !isNaN(limit)) {
-      exercisesQuery += " LIMIT ?";
-      queryParams.push(limit);
-    }
-
     if (from && dayjs(from, "YYYY-MM-DD", true).isValid()) {
       exercisesQuery += " AND date >= ?";
       queryParams.push(new Date(from));
@@ -191,9 +199,13 @@ app.get("/api/users/:_id/logs", (req, res) => {
 
     if (to && dayjs(to, "YYYY-MM-DD", true).isValid()) {
       exercisesQuery += " AND date <= ?";
-      queryParams.push(new Date(to).toDateString());
+      queryParams.push(new Date(to));
     }
 
+    if (limit && !isNaN(limit)) {
+      exercisesQuery += " LIMIT ?";
+      queryParams.push(limit);
+    }
 
     db.all(exercisesQuery, queryParams, (err, exercises) => {
       if (err) {
@@ -213,7 +225,7 @@ app.get("/api/users/:_id/logs", (req, res) => {
         })),
       };
 
-      res.json(response);
+      return res.json(response);
     });
   });
 });
