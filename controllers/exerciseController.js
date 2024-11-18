@@ -33,6 +33,10 @@ exports.addExercise = (req, res) => {
     const username = row.username;
     const formattedDate = date ? new Date(date) : new Date();
 
+    if (formattedDate.toString() === "Invalid Date") {
+      return res.status(400).json({ error: "Invalid Date is submitted" });
+    }
+
     const insertQuery = `
       INSERT INTO exercises (user_id, username, date, duration, description)
       VALUES (?, ?, ?, ?, ?)
@@ -87,25 +91,35 @@ exports.getExerciseLogs = (req, res) => {
       queryParams.push(new Date(to));
     }
 
-    if (limit && !isNaN(limit)) {
-      exercisesQuery += " LIMIT ?";
-      queryParams.push(limit);
-    }
+    exercisesQuery += " ORDER BY date ASC";
 
-    db.all(exercisesQuery, queryParams, (err, exercises) => {
+    db.all(exercisesQuery, queryParams, (err, exercisesCount) => {
       if (err)
         return res
           .status(500)
-          .json({ error: "Database error: Failed to fetch exercises" });
-      return res.json({
-        _id: user.id,
-        username: user.username,
-        count: exercises.length,
-        log: exercises.map((exercise) => ({
-          description: exercise.description,
-          duration: exercise.duration,
-          date: new Date(exercise.date).toDateString(),
-        })),
+          .json({ error: "Database error: Failed to fetch exercise count" });
+
+      if (limit && !isNaN(limit)) {
+        exercisesQuery += " LIMIT ?";
+        queryParams.push(limit);
+      }
+
+      db.all(exercisesQuery, queryParams, (err, exercises) => {
+        if (err)
+          return res
+            .status(500)
+            .json({ error: "Database error: Failed to fetch exercises" });
+
+        return res.json({
+          _id: user.id,
+          username: user.username,
+          count: exercisesCount.length,
+          log: exercises.map((exercise) => ({
+            description: exercise.description,
+            duration: exercise.duration,
+            date: new Date(exercise.date).toDateString(),
+          })),
+        });
       });
     });
   });
